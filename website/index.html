@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArduPilot Mission Planner - Flood Rescue GCS</title>
+    <meta name="description" content="Mission Planner Ground Control Station clone for the Autonomous Flood Rescue Drone System.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="gcs-body">
+    <!-- Top Connection and Menu Bar (Mission Planner Style) -->
+    <header class="mp-header">
+        <div class="mp-menu">
+            <button class="menu-btn active"><i data-lucide="layout-dashboard"></i> DATA</button>
+            <button class="menu-btn"><i data-lucide="map"></i> PLAN</button>
+            <button class="menu-btn"><i data-lucide="settings"></i> SETUP</button>
+            <button class="menu-btn"><i data-lucide="sliders"></i> CONFIG</button>
+            <button class="menu-btn"><i data-lucide="play-circle"></i> SIMULATION</button>
+            <button class="menu-btn"><i data-lucide="help-circle"></i> HELP</button>
+        </div>
+        
+        <div class="mp-branding">
+            <span>ARDUPILOT</span>
+        </div>
+
+        <div class="mp-connection">
+            <select id="select-com">
+                <option value="COM8" selected>COM8</option>
+                <option value="COM3">COM3</option>
+                <option value="COM1">COM1</option>
+                <option value="TCP">TCP Link</option>
+            </select>
+            <select id="select-baud">
+                <option value="115200" selected>115200</option>
+                <option value="57600">57600</option>
+                <option value="9600">9600</option>
+            </select>
+            <button id="btn-connect" class="connect-btn disconnected">
+                <i data-lucide="plug" class="btn-icon"></i> CONNECT
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="mp-workspace">
+        <!-- 1. Left Sidebar (HUD & Telemetry Tables) - Shared in DATA view -->
+        <aside class="mp-sidebar" id="sidebar-data">
+            <!-- Dedicated HUD Canvas -->
+            <div class="hud-container">
+                <canvas id="hud-canvas"></canvas>
+            </div>
+
+            <!-- Tab Selectors Bar -->
+            <div class="mp-tabs-bar">
+                <button class="tab-selector-btn active" data-tab="tab-quick">Quick</button>
+                <button class="tab-selector-btn" data-tab="tab-actions">Actions</button>
+                <button class="tab-selector-btn" data-tab="tab-messages">Messages</button>
+            </div>
+
+            <!-- Tab Content Area -->
+            <div class="mp-tabs-content">
+                <!-- Quick Telemetry Grid -->
+                <div id="tab-quick" class="tab-view active">
+                    <div class="quick-telemetry-grid">
+                        <div class="quick-item">
+                            <span class="quick-label">Altitude</span>
+                            <span class="quick-val font-mono text-purple"><span id="quick-alt">0.00</span><span class="quick-unit">m</span></span>
+                        </div>
+                        <div class="quick-item">
+                            <span class="quick-label">GroundSpeed</span>
+                            <span class="quick-val font-mono text-orange"><span id="quick-speed">0.00</span><span class="quick-unit">m/s</span></span>
+                        </div>
+                        <div class="quick-item">
+                            <span class="quick-label">Dist to WP</span>
+                            <span class="quick-val font-mono text-purple"><span id="quick-distwp">0.00</span><span class="quick-unit">m</span></span>
+                        </div>
+                        <div class="quick-item">
+                            <span class="quick-label">Yaw (deg)</span>
+                            <span class="quick-val font-mono text-green" id="quick-yaw">0.00</span>
+                        </div>
+                        <div class="quick-item">
+                            <span class="quick-label">Vertical Speed</span>
+                            <span class="quick-val font-mono text-cyan"><span id="quick-vspeed">0.00</span><span class="quick-unit">m/s</span></span>
+                        </div>
+                        <div class="quick-item">
+                            <span class="quick-label">Battery Level</span>
+                            <span class="quick-val font-mono text-cyan" id="quick-battery">100%</span>
+                        </div>
+                    </div>
+
+                    <!-- Telemetry Cards list for the 3 drones (replaces the simplified layout) -->
+                    <div class="divider-text" style="margin-top: 15px;">VEHICLE STATUS CARDS</div>
+                    <div class="telemetry-cards-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                        <div class="telemetry-card">
+                            <div class="telemetry-card-header">
+                                <span class="card-title font-mono text-cyan">SCOUT (D1)</span>
+                                <span id="d1-mode" class="telemetry-mode mode-idle">OFFLINE</span>
+                            </div>
+                            <div class="telemetry-card-row">
+                                <span>GPS: <span id="d1-gps" class="font-mono text-muted">X:0 Y:0</span></span>
+                                <span>Volts: <span id="d1-voltage" class="font-mono text-muted">0.00V</span></span>
+                            </div>
+                            <div class="telemetry-battery-bar">
+                                <div id="d1-battery" class="battery-fill" style="width: 0%;"></div>
+                                <span id="d1-battery-text" class="battery-percent-text">0%</span>
+                            </div>
+                        </div>
+
+                        <div class="telemetry-card">
+                            <div class="telemetry-card-header">
+                                <span class="card-title font-mono text-blue">DELIVER A (D2)</span>
+                                <span id="d2-mode" class="telemetry-mode mode-idle">OFFLINE</span>
+                            </div>
+                            <div class="telemetry-card-row">
+                                <span>GPS: <span id="d2-gps" class="font-mono text-muted">X:0 Y:0</span></span>
+                                <span>Volts: <span id="d2-voltage" class="font-mono text-muted">0.00V</span></span>
+                            </div>
+                            <div class="telemetry-battery-bar">
+                                <div id="d2-battery" class="battery-fill" style="width: 0%;"></div>
+                                <span id="d2-battery-text" class="battery-percent-text">0%</span>
+                            </div>
+                        </div>
+
+                        <div class="telemetry-card">
+                            <div class="telemetry-card-header">
+                                <span class="card-title font-mono text-purple">DELIVER B (D3)</span>
+                                <span id="d3-mode" class="telemetry-mode mode-idle">OFFLINE</span>
+                            </div>
+                            <div class="telemetry-card-row">
+                                <span>GPS: <span id="d3-gps" class="font-mono text-muted">X:0 Y:0</span></span>
+                                <span>Volts: <span id="d3-voltage" class="font-mono text-muted">0.00V</span></span>
+                            </div>
+                            <div class="telemetry-battery-bar">
+                                <div id="d3-battery" class="battery-fill" style="width: 0%;"></div>
+                                <span id="d3-battery-text" class="battery-percent-text">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Commands list -->
+                <div id="tab-actions" class="tab-view">
+                    <div class="action-buttons-list">
+                        <button id="btn-arm" class="gcs-action-btn btn-arm disarmed" disabled>
+                            <i data-lucide="power" class="btn-icon"></i> ARM / DISARM
+                        </button>
+                        
+                        <div class="mode-select-grid">
+                            <button id="btn-auto" class="gcs-action-btn btn-mode" disabled>
+                                <i data-lucide="waypoints" class="btn-icon"></i> AUTO
+                            </button>
+                            <button id="btn-guided" class="gcs-action-btn btn-mode" disabled>
+                                <i data-lucide="mouse-pointer-click" class="btn-icon"></i> GUIDED
+                            </button>
+                            <button id="btn-rtl" class="gcs-action-btn btn-mode" disabled>
+                                <i data-lucide="home" class="btn-icon"></i> RTL
+                            </button>
+                            <button id="btn-land" class="gcs-action-btn btn-mode" disabled>
+                                <i data-lucide="arrow-down-circle" class="btn-icon"></i> LAND
+                            </button>
+                        </div>
+
+                        <div class="divider-text">SIMULATION UTILITIES</div>
+
+                        <button id="btn-spawn" class="gcs-action-btn btn-orange" disabled>
+                            <i data-lucide="user-plus" class="btn-icon"></i> Spawns Sighting
+                        </button>
+                        <button id="btn-deploy" class="gcs-action-btn btn-blue" disabled>
+                            <i data-lucide="package-open" class="btn-icon"></i> Deploy Delivery Copter
+                        </button>
+                        <button id="btn-clear-mission" class="gcs-action-btn btn-secondary-outline">
+                            <i data-lucide="eraser" class="btn-icon"></i> Clear Waypoints
+                        </button>
+                        <button id="btn-reset" class="gcs-action-btn btn-secondary-outline">
+                            <i data-lucide="refresh-cw" class="btn-icon"></i> Reset GCS
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Messages Status Log -->
+                <div id="tab-messages" class="tab-view">
+                    <div class="logs-header-bar">
+                        <span>Console Terminal Buffer</span>
+                        <button id="btn-clear-logs" class="clear-logs-btn">
+                            <i data-lucide="trash-2" class="btn-icon"></i> Clear
+                        </button>
+                    </div>
+                    <div class="terminal-logs" id="terminal-logs-container">
+                        <div class="log-entry system-entry">
+                            <span class="log-timestamp">[09:24:20]</span>
+                            <span class="log-msg"><span class="text-cyan">[SYSTEM]</span> Ground Control Station offline. Connect to COM port.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 2. Right Sidebar (Waypoint Planning Controls) - Shown in PLAN view -->
+        <aside class="plan-sidebar" id="sidebar-plan" style="display: none;">
+            <div class="plan-panel-title">Mission Command</div>
+            <div class="plan-section">
+                <button id="btn-load-wp" class="plan-btn"><i data-lucide="file-up"></i> Load File</button>
+                <button id="btn-save-wp" class="plan-btn"><i data-lucide="save"></i> Save File</button>
+            </div>
+            <div class="plan-section-divider"></div>
+            <div class="plan-section">
+                <button id="btn-read-wp" class="plan-btn btn-green"><i data-lucide="arrow-down-to-line"></i> Read WPs</button>
+                <button id="btn-write-wp" class="plan-btn btn-orange"><i data-lucide="arrow-up-from-line"></i> Write WPs</button>
+            </div>
+            <div class="plan-section-divider"></div>
+            <div class="plan-group">
+                <label>Home Location</label>
+                <div class="plan-input-row">
+                    <span>Lat</span>
+                    <input type="number" id="home-lat" value="42.3489" step="0.0001">
+                </div>
+                <div class="plan-input-row">
+                    <span>Long</span>
+                    <input type="number" id="home-lng" value="-71.1023" step="0.0001">
+                </div>
+                <div class="plan-input-row">
+                    <span>Alt (ASL)</span>
+                    <input type="number" id="home-asl" value="10" step="1">
+                </div>
+            </div>
+        </aside>
+
+        <!-- 3. Tactical Map Area (Shared in DATA, PLAN, SIMULATION views) -->
+        <main class="mp-map-area" id="map-area">
+            <div class="canvas-container">
+                <canvas id="simulation-canvas"></canvas>
+                <!-- Zoom Control Slider Overlay -->
+                <div class="zoom-slider-container">
+                    <button id="btn-zoom-in" class="zoom-btn">+</button>
+                    <div class="zoom-track">
+                        <div class="zoom-handle" style="top: 40%"></div>
+                    </div>
+                    <button id="btn-zoom-out" class="zoom-btn">-</button>
+                </div>
+            </div>
+
+            <!-- Bottom Waypoint Table Panel - Shown in PLAN view -->
+            <div class="waypoint-panel" id="panel-waypoint" style="display: none;">
+                <div class="panel-header">
+                    <span>Waypoints List</span>
+                    <div class="wp-metrics">
+                        <span>WP Radius: <input type="number" id="wp-radius" value="2.0" step="0.1" style="width: 45px; background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 2px 4px;"> m</span>
+                        <span>Default Alt: <input type="number" id="wp-default-alt" value="100" style="width: 50px; background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 2px 4px;"> m</span>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="wp-table">
+                        <thead>
+                            <tr>
+                                <th>Index</th>
+                                <th>Command</th>
+                                <th>Alt (m)</th>
+                                <th>Lat</th>
+                                <th>Lon</th>
+                                <th>Delete</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Bottom SITL Launcher Bar - Shown in SIMULATION view -->
+            <div class="sitl-panel" id="panel-simulation-sitl" style="display: none;">
+                <div class="sitl-header">SITL Simulator Options</div>
+                <div class="sitl-controls-row">
+                    <div class="sitl-control-group">
+                        <label>Sim Speed</label>
+                        <select id="sim-speed" style="background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 2px 4px; border-radius: 3px;">
+                            <option value="1">1x (Normal)</option>
+                            <option value="2">2x</option>
+                            <option value="5">5x</option>
+                            <option value="10">10x</option>
+                        </select>
+                    </div>
+                    <div class="sitl-control-group">
+                        <label>Heading</label>
+                        <input type="number" id="sitl-heading" value="0" min="0" max="359" style="width: 60px; background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 2px 4px; border-radius: 3px;">
+                    </div>
+                    <div class="sitl-control-group">
+                        <label>Vehicle Type</label>
+                        <select id="sitl-vehicle-type" style="background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 2px 4px; border-radius: 3px;">
+                            <option value="copter">Quadcopter (Copter)</option>
+                            <option value="rover">Ground Rover (Rover)</option>
+                            <option value="plane">Fixed-Wing (Plane)</option>
+                        </select>
+                    </div>
+                    <button id="btn-sitl-launch" class="plan-btn btn-green"><i data-lucide="play"></i> Launch SITL</button>
+                    <button id="btn-sitl-wipe" class="plan-btn btn-secondary-outline"><i data-lucide="trash-2"></i> Wipe EEPROM</button>
+                </div>
+            </div>
+            
+            <!-- Map coordinates footer bar -->
+            <div class="map-footer-bar">
+                <div class="map-gps-val" id="map-cursor-coords">
+                    GPS: 42.3489° N, -71.1023° W
+                </div>
+                <div class="map-status-metrics">
+                    <span class="metric-segment">Sats: <span id="telemetry-sats" class="text-red">0</span></span>
+                    <span class="metric-segment">Link: <span id="telemetry-link" class="text-red">DISCONNECTED</span></span>
+                    <span class="metric-segment">HDOP: <span id="telemetry-hdop" class="text-muted">0.0</span></span>
+                </div>
+            </div>
+        </main>
+
+        <!-- 4. SETUP Panel (Firmware Install screen) - Shown in SETUP view -->
+        <section class="full-panel" id="panel-setup" style="display: none;">
+            <aside class="panel-left-menu">
+                <button class="panel-menu-btn active" data-setup-tab="firmware">Install Firmware</button>
+                <button class="panel-menu-btn" data-setup-tab="hw">Optional Hardware</button>
+                <button class="panel-menu-btn" data-setup-tab="adv">Advanced Setup</button>
+            </aside>
+            <main class="panel-main-content">
+                <div class="panel-title-bar">Install Firmware</div>
+                <div class="firmware-grid">
+                    <div class="firmware-card" data-firmware="copter">
+                        <div class="firmware-icon-container">
+                            <i data-lucide="navigation" style="transform: rotate(45deg); width: 40px; height: 40px; color: var(--gcs-green);"></i>
+                        </div>
+                        <div class="firmware-name">Copter V4.6.3 OFFICIAL</div>
+                        <div class="firmware-desc">Standard multirotor autopilot code. Used for vertical takeoff, hovering search and recovery.</div>
+                    </div>
+                    <div class="firmware-card" data-firmware="rover">
+                        <div class="firmware-icon-container">
+                            <i data-lucide="car" style="width: 40px; height: 40px; color: var(--gcs-orange);"></i>
+                        </div>
+                        <div class="firmware-name">Rover V4.6.3 OFFICIAL</div>
+                        <div class="firmware-desc">Ground vehicle system. Ideal for land search operations and debris detours.</div>
+                    </div>
+                    <div class="firmware-card" data-firmware="plane">
+                        <div class="firmware-icon-container">
+                            <i data-lucide="plane" style="width: 40px; height: 40px; color: var(--gcs-cyan);"></i>
+                        </div>
+                        <div class="firmware-name">Plane V4.6.3 OFFICIAL</div>
+                        <div class="firmware-desc">Fixed wing navigation flight paths. Long range, fast speed high-altitude surveys.</div>
+                    </div>
+                    <div class="firmware-card" data-firmware="sub">
+                        <div class="firmware-icon-container">
+                            <i data-lucide="ship" style="width: 40px; height: 40px; color: var(--gcs-blue);"></i>
+                        </div>
+                        <div class="firmware-name">Sub V4.5.7 OFFICIAL</div>
+                        <div class="firmware-desc">Underwater ROV operation codes for deep-water rescue inspections.</div>
+                    </div>
+                </div>
+
+                <div class="upload-progress-container" id="upload-progress" style="display: none;">
+                    <div class="progress-bar-title" id="progress-title">Uploading Firmware...</div>
+                    <div class="progress-track">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-status" id="progress-status">Connecting to target board...</div>
+                </div>
+            </main>
+        </section>
+
+        <!-- 5. CONFIG Panel (Planner settings screen) - Shown in CONFIG view -->
+        <section class="full-panel" id="panel-config" style="display: none;">
+            <aside class="panel-left-menu">
+                <button class="panel-menu-btn active" data-config-tab="planner">Planner Settings</button>
+                <button class="panel-menu-btn" data-config-tab="params">Full Parameter List</button>
+                <button class="panel-menu-btn" data-config-tab="tree">Full Parameter Tree</button>
+            </aside>
+            <main class="panel-main-content">
+                <div class="panel-title-bar">Planner Settings</div>
+                <div class="config-settings-sheet">
+                    <div class="config-row">
+                        <div class="config-field">
+                            <label for="config-osd-color">HUD OSD Color</label>
+                            <select id="config-osd-color">
+                                <option value="green" selected>Active Green (Default)</option>
+                                <option value="cyan">Electric Cyan</option>
+                                <option value="orange">Orange Warning</option>
+                                <option value="white">Standard White</option>
+                            </select>
+                        </div>
+                        <div class="config-field">
+                            <label for="config-language">UI Language</label>
+                            <select id="config-language">
+                                <option value="en" selected>English (United States)</option>
+                                <option value="es">Español</option>
+                                <option value="fr">Français</option>
+                                <option value="de">Deutsch</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="config-row">
+                        <div class="config-field">
+                            <label for="config-dist-units">Distance / Altitude Units</label>
+                            <select id="config-dist-units">
+                                <option value="meters" selected>Meters</option>
+                                <option value="feet">Feet</option>
+                            </select>
+                        </div>
+                        <div class="config-field">
+                            <label for="config-speed-units">Speed Units</label>
+                            <select id="config-speed-units">
+                                <option value="m_s" selected>Meters per second (m/s)</option>
+                                <option value="knots">Knots (kt)</option>
+                                <option value="mph">Miles per hour (mph)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="config-row">
+                        <div class="config-field flex-row">
+                            <input type="checkbox" id="config-map-follow">
+                            <label for="config-map-follow" style="margin-left: 8px; cursor: pointer;">Map Follow (Auto-pan map to track active drone)</label>
+                        </div>
+                        <div class="config-field">
+                            <label for="config-theme">Application Theme Style</label>
+                            <select id="config-theme">
+                                <option value="dark" selected>Classic Slate (Dark)</option>
+                                <option value="kermit">Kermit Green</option>
+                                <option value="orange">Orange Warning</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="config-row">
+                        <div class="config-field">
+                            <label for="config-speech">Enable Telemetry Speech</label>
+                            <div class="flex-row gap-8">
+                                <input type="checkbox" id="config-speech" checked>
+                                <span style="margin-left: 8px;">Voice announcements on status logs</span>
+                            </div>
+                        </div>
+                        <div class="config-field">
+                            <label for="config-speech-level">Speech Severity Level</label>
+                            <select id="config-speech-level">
+                                <option value="info">Info & Above</option>
+                                <option value="warning" selected>Warning & Above</option>
+                                <option value="danger">Danger only</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </section>
+
+        <!-- 6. HELP Panel - Shown in HELP view -->
+        <section class="full-panel" id="panel-help" style="display: none;">
+            <main class="panel-main-content" style="width: 100%; max-width: 800px; margin: 40px auto; padding: 20px;">
+                <div class="panel-title-bar">Mission Planner Help & Documentation</div>
+                <div class="help-content-box" style="background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 4px; padding: 25px; line-height: 1.6;">
+                    <h3 style="color: var(--gcs-cyan); margin-bottom: 12px;">Quick Guide</h3>
+                    <p style="margin-bottom: 15px;">Welcome to ArduPilot Mission Planner - Flood Rescue GCS! Here is how to run simulations:</p>
+                    <ul style="margin-left: 20px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px;">
+                        <li><strong>Connect:</strong> Choose a COM port at the top right, select 115200 baud, and click CONNECT.</li>
+                        <li><strong>Waypoints Planning:</strong> Go to the <strong>PLAN</strong> view. Click on the map to add waypoint flags. You can change altitudes or delete coordinates from the table at the bottom. Click "Write WPs" to upload waypoints to the drone.</li>
+                        <li><strong>Launch Drone:</strong> Go back to <strong>DATA</strong> view, click ARM VEHICLE, select AUTO mode. The Scout drone will fly the planned path.</li>
+                        <li><strong>Rescue survivors:</strong> When scanning, if a survivor is detected, go to the Actions tab, and click "Deploy Delivery Copter".</li>
+                    </ul>
+                    <div style="border-top: 1px dashed var(--border-color); padding-top: 15px; color: var(--text-muted); font-size: 0.8rem;">
+                        Reference build: Mission Planner 1.3.79.1. Simulated using standard MAVLink messages.
+                    </div>
+                </div>
+            </main>
+        </section>
+    </div>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
